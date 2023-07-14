@@ -6,7 +6,7 @@ from tqdm import tqdm
 from abc import ABC, abstractmethod
 
 import openai
-from langchain.llms.google_palm import GooglePalm
+from langchain.llms import VertexAI
 from langchain.prompts.base import StringPromptValue
 
 gpt_costs_per_thousand = {
@@ -24,8 +24,8 @@ def model_from_config(config, disable_tqdm=True):
         return GPT_Forward(config, disable_tqdm=disable_tqdm)
     elif model_type == "GPT_insert":
         return GPT_Insert(config, disable_tqdm=disable_tqdm)
-    elif model_type == "GooglePALM_forward":
-        return GooglePALM_forward(config, disable_tqdm=disable_tqdm)
+    elif model_type == "VertexAI_forward":
+        return VertexAI_forward(config, disable_tqdm=disable_tqdm)
     raise ValueError(f"Unknown model type: {model_type}")
 
 
@@ -259,11 +259,11 @@ class GPT_Forward(LLM):
 
         return lower_index, upper_index
 
-class GooglePALM_forward(LLM):
-    """Wrapper for LangChain's GooglePalm.
+class VertexAI_forward(LLM):
+    """Wrapper for LangChain's VertexAI module.
 
-    GOOGLE_API_KEY env variable must be set. Go to
-    https://developers.generativeai.google/ to generate API key.
+    Please read the following for auth setup:
+    https://python.langchain.com/docs/modules/model_io/models/llms/integrations/google_vertex_ai_palm
     """
 
     def __init__(self, config, disable_tqdm=True):
@@ -271,32 +271,24 @@ class GooglePALM_forward(LLM):
         self.config = config
         self.disable_tqdm = disable_tqdm
 
-
-    def auto_reduce_n(self, fn, prompt, n):
-        """Reduces n by half until the function succeeds."""
-        try:
-            return fn(prompt, n)
-        except BatchSizeException as e:
-            if n == 1:
-                raise e
-            return self.auto_reduce_n(fn, prompt, n // 2) + self.auto_reduce_n(fn, prompt, n // 2)
-
     def generate_text(self, prompt, n):
         if not isinstance(prompt, list):
             prompt = [prompt]
+
+        prompt = prompt
         batch_size = self.config['batch_size']
         prompt_batches = [prompt[i:i + batch_size]
                           for i in range(0, len(prompt), batch_size)]
         if not self.disable_tqdm:
             print(
-                f"[{self.config['name']}] Generating {len(prompt) * n} "
+                f"[{self.config['name']}] Generating {len(prompt)} "
                 f"completions, split into {len(prompt_batches)} batch(es) of "
-                f"size {max(len(prompt), batch_size * n)}."
+                f"size {min(len(prompt), batch_size)}."
             )
         text = []
 
         for prompt_batch in tqdm(prompt_batches, disable=self.disable_tqdm):
-            text += self.auto_reduce_n(self.__generate_text, prompt_batch, n)
+            text += self.__generate_text(prompt_batch, n)
         return text
 
     def log_probs(self, text, log_prob_range=None):
@@ -308,25 +300,28 @@ class GooglePALM_forward(LLM):
         if not isinstance(prompt, list):
             prompt = [prompt]
         config = self.config['gpt_config'].copy()
-        config['n'] = n
         # If there are any [APE] tokens in the prompts, remove them
         for i in range(len(prompt)):
             prompt[i] = prompt[i].replace('[APE]', '').strip()
             prompt[i] = StringPromptValue(text=prompt[i])
-        response = None
-        while response is None:
-            try:
-                response = GooglePalm(**config).generate_prompt(prompts=prompt)
-            except Exception as e:
-                if 'is greater than the maximum' in str(e):
-                    raise BatchSizeException()
-                print(e)
-                print('Retrying...')
-                time.sleep(5)
 
-        return [gen.text
-                for result in response.generations
-                for gen in result]
+        all_candidates = []
+        for _ in range(n):
+            response = None
+            while response is None:
+                try:
+                    response = VertexAI(**config).generate_prompt(prompts=prompt)
+                except Exception as e:
+                    if 'is greater than the maximum' in str(e):
+                        raise BatchSizeException()
+                    print(e)
+                    print('Retrying...')
+                    time.sleep(5)
+
+            all_candidates.extend([gen.text
+                                   for result in response.generations
+                                   for gen in result])
+        return all_candidates
 
 
 class GPT_Insert(LLM):

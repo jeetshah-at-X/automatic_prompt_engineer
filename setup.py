@@ -16,7 +16,7 @@ setup(
         'tqdm',
         'gradio',
         'langchain',
-        'google-generativeai',
+        'google-cloud-aiplatform',
         'transformers',
     ],
 )
