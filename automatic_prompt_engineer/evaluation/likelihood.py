@@ -1,4 +1,6 @@
+from typing import Any, List, Mapping, Tuple
 from automatic_prompt_engineer import llm, data, evaluate
+from template import EvalTemplate, DemosTemplate
 import numpy as np
 
 special_output_token = '[[[[OUTPUT]]]]'
@@ -30,7 +32,12 @@ def get_query(prompt, eval_template, input_, output_, demo_data, demos_template)
     return query, output_idx
 
 
-def likelihood_evaluator(prompts, eval_template, eval_data, demos_template, few_shot_data, config):
+def likelihood_evaluator(prompts: List[str],
+                         eval_template: EvalTemplate,
+                         eval_data: Tuple[List[str], List[str]],
+                         demos_template: DemosTemplate,
+                         few_shot_data: Tuple[List[str], List[str]],
+                         config: Mapping[str, Any]):
     """
     For each prompt, evaluate the likelihood of the data (output) given the prompt.
     Parameters:

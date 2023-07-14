@@ -6,6 +6,8 @@ from tqdm import tqdm
 from abc import ABC, abstractmethod
 
 import openai
+from langchain.llms.google_palm import GooglePalm
+from langchain.prompts.base import StringPromptValue
 
 gpt_costs_per_thousand = {
     'davinci': 0.0200,
@@ -22,6 +24,8 @@ def model_from_config(config, disable_tqdm=True):
         return GPT_Forward(config, disable_tqdm=disable_tqdm)
     elif model_type == "GPT_insert":
         return GPT_Insert(config, disable_tqdm=disable_tqdm)
+    elif model_type == "GooglePALM_forward":
+        return GooglePALM_forward(config, disable_tqdm=disable_tqdm)
     raise ValueError(f"Unknown model type: {model_type}")
 
 
@@ -43,7 +47,7 @@ class LLM(ABC):
         """Returns the log probs of the text.
         Parameters:
             text: The text to get the log probs of. This can be a string or a list of strings.
-            log_prob_range: The range of characters within each string to get the log_probs of. 
+            log_prob_range: The range of characters within each string to get the log_probs of.
                 This is a list of tuples of the form (start, end).
         Returns:
             A list of log probs.
@@ -254,6 +258,75 @@ class GPT_Forward(LLM):
                 break
 
         return lower_index, upper_index
+
+class GooglePALM_forward(LLM):
+    """Wrapper for LangChain's GooglePalm.
+
+    GOOGLE_API_KEY env variable must be set. Go to
+    https://developers.generativeai.google/ to generate API key.
+    """
+
+    def __init__(self, config, disable_tqdm=True):
+        """Initializes the model."""
+        self.config = config
+        self.disable_tqdm = disable_tqdm
+
+
+    def auto_reduce_n(self, fn, prompt, n):
+        """Reduces n by half until the function succeeds."""
+        try:
+            return fn(prompt, n)
+        except BatchSizeException as e:
+            if n == 1:
+                raise e
+            return self.auto_reduce_n(fn, prompt, n // 2) + self.auto_reduce_n(fn, prompt, n // 2)
+
+    def generate_text(self, prompt, n):
+        if not isinstance(prompt, list):
+            prompt = [prompt]
+        batch_size = self.config['batch_size']
+        prompt_batches = [prompt[i:i + batch_size]
+                          for i in range(0, len(prompt), batch_size)]
+        if not self.disable_tqdm:
+            print(
+                f"[{self.config['name']}] Generating {len(prompt) * n} "
+                f"completions, split into {len(prompt_batches)} batch(es) of "
+                f"size {max(len(prompt), batch_size * n)}."
+            )
+        text = []
+
+        for prompt_batch in tqdm(prompt_batches, disable=self.disable_tqdm):
+            text += self.auto_reduce_n(self.__generate_text, prompt_batch, n)
+        return text
+
+    def log_probs(self, text, log_prob_range=None):
+        """Returns the log probs of the text."""
+        return NotImplementedError
+
+    def __generate_text(self, prompt, n):
+        """Generates text from the model."""
+        if not isinstance(prompt, list):
+            prompt = [prompt]
+        config = self.config['gpt_config'].copy()
+        config['n'] = n
+        # If there are any [APE] tokens in the prompts, remove them
+        for i in range(len(prompt)):
+            prompt[i] = prompt[i].replace('[APE]', '').strip()
+            prompt[i] = StringPromptValue(text=prompt[i])
+        response = None
+        while response is None:
+            try:
+                response = GooglePalm(**config).generate_prompt(prompts=prompt)
+            except Exception as e:
+                if 'is greater than the maximum' in str(e):
+                    raise BatchSizeException()
+                print(e)
+                print('Retrying...')
+                time.sleep(5)
+
+        return [gen.text
+                for result in response.generations
+                for gen in result]
 
 
 class GPT_Insert(LLM):

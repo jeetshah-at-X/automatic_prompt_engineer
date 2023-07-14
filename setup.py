@@ -15,5 +15,8 @@ setup(
         'fire',
         'tqdm',
         'gradio',
+        'langchain',
+        'google-generativeai',
+        'transformers',
     ],
 )
