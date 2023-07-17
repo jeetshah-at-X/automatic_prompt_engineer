@@ -276,7 +276,7 @@ class VertexAI_forward(LLM):
             prompt = [prompt]
 
         prompt = prompt
-        batch_size = self.config['batch_size']
+        batch_size = self.config['batch_size']//n
         prompt_batches = [prompt[i:i + batch_size]
                           for i in range(0, len(prompt), batch_size)]
         if not self.disable_tqdm:
