@@ -4,7 +4,8 @@ generation:
   num_prompts_per_subsample: 50
   model:
     name: VertexAI_forward
-    batch_size: 500
+    batch_size: 60
+    inter_batch_sleep: 60
     gpt_config:
       model_name: text-bison
       temperature: 0.9
@@ -15,7 +16,8 @@ evaluation:
   num_few_shot: 5
   model:
     name: VertexAI_forward
-    batch_size: 500
+    batch_size: 60
+    inter_batch_sleep: 60
     gpt_config:
       model: text-bison
       temperature: 0.0
@@ -23,7 +25,8 @@ evaluation:
 demo:
   model:
     name: VertexAI_forward
-    batch_size: 500
+    batch_size: 60
+    inter_batch_sleep: 60
     gpt_config:
       model: text-bison
       temperature: 0.0

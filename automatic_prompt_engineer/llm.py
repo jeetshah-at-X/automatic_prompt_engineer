@@ -289,6 +289,7 @@ class VertexAI_forward(LLM):
 
         for prompt_batch in tqdm(prompt_batches, disable=self.disable_tqdm):
             text += self.__generate_text(prompt_batch, n)
+            time.sleep(self.config['inter_batch_sleep'])
         return text
 
     def log_probs(self, text, log_prob_range=None):
