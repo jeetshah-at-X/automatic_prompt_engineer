@@ -279,17 +279,21 @@ class VertexAI_forward(LLM):
         batch_size = self.config['batch_size']//n
         prompt_batches = [prompt[i:i + batch_size]
                           for i in range(0, len(prompt), batch_size)]
+
         if not self.disable_tqdm:
             print(
                 f"[{self.config['name']}] Generating {len(prompt)} "
                 f"completions, split into {len(prompt_batches)} batch(es) of "
                 f"size {min(len(prompt), batch_size)}."
             )
-        text = []
 
+        text = []
+        batch_start_time = time.time()
         for prompt_batch in tqdm(prompt_batches, disable=self.disable_tqdm):
             text += self.__generate_text(prompt_batch, n)
-            time.sleep(self.config['inter_batch_sleep'])
+            batch_duration = time.time() - batch_start_time
+            if batch_duration < self.config['inter_batch_sleep']:
+                time.sleep(self.config['inter_batch_sleep'] - batch_duration)
         return text
 
     def log_probs(self, text, log_prob_range=None):
