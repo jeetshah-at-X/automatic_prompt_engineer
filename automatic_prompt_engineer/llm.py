@@ -288,8 +288,8 @@ class VertexAI_forward(LLM):
             )
 
         text = []
-        batch_start_time = time.time()
         for prompt_batch in tqdm(prompt_batches, disable=self.disable_tqdm):
+            batch_start_time = time.time()
             text += self.__generate_text(prompt_batch, n)
             batch_duration = time.time() - batch_start_time
             if batch_duration < self.config['inter_batch_sleep']:
